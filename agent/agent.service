@@ -2,9 +2,11 @@
 Description=pgbench agent
 After=network-online.target
 [Service]
-Environment=WS_URL=wss://192.168.100.7:4000/api/scenario
-ExecStart=/usr/bin/python3 /opt/agent/agent.py
-Restart=always
 User=postgres
+Environment=WS_URL=ws://192.168.101.122:4000/api/agents
+Environment=AGENT_ID=%H
+ExecStart=/usr/bin/python3.12 -u /opt/agent/agent.py
+Restart=always
+StandardOutput=journal
 [Install]
 WantedBy=multi-user.target
