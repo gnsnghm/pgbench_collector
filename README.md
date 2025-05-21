@@ -36,10 +36,10 @@ graph TD
 
 ## 1. 前提条件
 
-| 役割                     | 必要環境                                                                                                                                              |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **コントロールプレーン** | Docker 20+, Docker Compose v2 以上, ポート 3000/3001/4000 を使用                                                                                      |
-| **エージェント**         | Python ≥ 3.8, `pgbench` (postgresql-contrib パッケージ), ポート 4000 へアウトバウンド通信可能, Openssh インストール済, ログインユーザ `sudo` 利用可能 |
+| 役割                     | 必要環境                                                                                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **コントロールプレーン** | Docker 20+, Docker Compose v2 以上, ポート 3000/3001/4000 を使用                                                                                                    |
+| **エージェント**         | Python ≥ 3.8<br>`pgbench` (postgresql-contrib パッケージ)<br>ポート 4000 へアウトバウンド通信可能<br>Openssh インストール済<br>ssh ログインユーザが `sudo` 利用可能 |
 
 ---
 
@@ -62,6 +62,13 @@ UI       : http://localhost:3000
 Grafana  : http://localhost:3001 (admin / $GF_GRAFANA_PASS)
 ```
 
+**proxy が必要な環境でコンテナを起動する場合、 `docker-compose-proxy.ymd` をリネームしてお使いください**
+
+```bash
+$ mv docker-compose.yml dokcer-compose-org.yml
+$ mv docker-compose-proxy.yml docker-compose.yml
+```
+
 `init/00_create_lab.sh` が自動で `lab` データベースと TimescaleDB 拡張を作成します。  
 postgres の init スクリプトがどうしても起動しない場合、`docker compose exec postgres psql -U postgres -c "CREATE DATABASE lab` を実行して lab を作成してください。
 
@@ -71,6 +78,12 @@ postgres の init スクリプトがどうしても起動しない場合、`dock
 PG_URL=postgres://postgres:secret@postgres:5432/postgres?sslmode=disable
 POSTGRES_PASSWORD=secret
 GF_GRAFANA_PASS=admin
+```
+
+proxy を利用している場合、以下の環境変数も追加するようにしてください。
+
+```env
+あとでかく
 ```
 
 ---
@@ -84,6 +97,8 @@ $ pip wheel ./agent -w dist
 ```
 
 ### 3.2 エージェントホストでのインストール
+
+proxy が必要な場合は適宜対応してください
 
 ```bash
 # 事前インストール(今回は OpenSUSE の例)
