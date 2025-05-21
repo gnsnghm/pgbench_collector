@@ -1,0 +1,61 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    environment:
+      <<: *proxy-env        
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init:/docker-endpoint-initdb.d
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    environment: *proxy-env
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    environment:
+      <<: *proxy-env
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_GRAFANA_PASS}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3001:3000"
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        <<: *proxy-env
+    environment:
+      <<: *proxy-env
+      REDIS_URL: redis://redis:6379
+      PG_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/lab?sslmode=disable
+    ports:
+      - "4000:4000"
+    depends_on: [redis, postgres]
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: ./ui
+      args:
+        <<: *proxy-env
+    environment:
+      <<: *proxy-env
+      NEXT_PUBLIC_WS_BASE: ws://localhost:4000
+    ports:
+      - "3000:3000"
+    depends_on: [backend]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
