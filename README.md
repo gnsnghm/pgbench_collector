@@ -83,7 +83,9 @@ GF_GRAFANA_PASS=admin
 proxy を利用している場合、以下の環境変数も追加するようにしてください。
 
 ```env
-あとでかく
+HTTP_PROXY=http://<YOUR-PROXY-FQDN>:8080
+HTTPS_PROXY=http://<YOUR-PROXY-FQDN>:8080
+NO_PROXY=localhost,127.0.0.1
 ```
 
 ---
