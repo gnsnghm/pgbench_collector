@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pgbench-agent"
+version = "0.1.0"
+description = "Pgbench collector agent"
+readme = "README.md"
+requires-python = ">=3.8"
+
+dependencies = [
+  "python-socketio[client]>=5.11,<6",
+  "aiohttp>=3.9,<4",
+]
+
+[project.scripts]
+pgbench-agent = "agent:main"

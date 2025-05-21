@@ -1,92 +1,213 @@
-# pgbench‑collector
+# pgbench_collector（日本語版）
 
-**pgbench‑collector** は、複数エージェントから `pgbench` のメトリクスを収集し、TimescaleDB(PostgreSQL) へ蓄積して Grafana で可視化するサンプル構成です。
+PostgreSQL に負荷を掛けてベンチマーク結果を TimescaleDB に蓄積し、Grafana で可視化する軽量フレームワークです。
 
-```
-┌─────────┐      WebSocket      ┌──────────┐  INSERT   ┌────────────┐
-│ agent   │───►  backend  ─────►│ Postgres │──────────►│ Grafana UI │
-└─────────┘   (BullMQ queue)    │+Timescale│           └────────────┘
-                                └──────────┘
-```
+- **コントロールプレーン**（Docker Compose スタック）
 
-- **backend** : Node.js / Express / ws / BullMQ
-- **agent** : Python 3. 11 or 12, `pgbench` ラッパー
-- **ui** : Next.js 15 (開発用ポート **3000**)
-- **grafana** : Grafana OSS 10 (公開ポート **3001**)
-- **postgres**: PostgreSQL 16 + TimescaleDB 拡張 (ポート **5432**)
+  - Express + Socket.IO バックエンド
+  - TimescaleDB / Redis / Grafana / Prometheus
+  - Next.js 製フロントエンド（UI）
 
----
+- **エージェント**
 
-## 1. 前提
-
-| 要件            | バージョン例                                                            |
-| --------------- | ----------------------------------------------------------------------- |
-| Docker          | 20.10+                                                                  |
-| Docker Compose  | v2+                                                                     |
-| Git             | 任意                                                                    |
-| VM エージェント | PostgreSQL **15 以上** がインストール済み (`pgbench -P 1` が使えること) |
+  - Python 3 + pgbench
+  - Socket.IO でリアルタイムに TPS／レイテンシを送信
+  - systemd サービスとして常駐
 
 ---
 
-## 2. クローン
+## 0. 全体構成
+
+```mermaid
+graph TD
+  subgraph Control-Plane
+    UI[UI / Next.js]
+    API[backend / Socket.IO]
+    DB[(TimescaleDB)]
+    Grafana[Grafana]
+    UI -- REST+WebSocket --> API
+    API -- INSERT progress/result --> DB
+    Grafana -- SELECT --> DB
+  end
+  Agent[pgbench Agents] -- WebSocket --> API
+```
+
+---
+
+## 1. 前提条件
+
+| 役割                     | 必要環境                                                                                                                                              |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **コントロールプレーン** | Docker 20+, Docker Compose v2 以上, ポート 3000/3001/4000 を使用                                                                                      |
+| **エージェント**         | Python ≥ 3.8, `pgbench` (postgresql-contrib パッケージ), ポート 4000 へアウトバウンド通信可能, Openssh インストール済, ログインユーザ `sudo` 利用可能 |
+
+---
+
+## 2. コントロールプレーンの起動
 
 ```bash
-git clone https://github.com/your-name/pgbench-collector.git
-cd pgbench-collector
+# リポジトリ取得
+$ git clone https://github.com/gnsnghm/pgbench_collector
+$ cd pgbench_collector
+
+# 環境変数設定
+$ cp .env.sample .env       # PG_URL / POSTGRES_PASSWORD / GF_GRAFANA_PASS を編集
+
+# ビルド & 起動
+$ docker compose build
+$ docker compose up -d
+
+# 動作確認
+UI       : http://localhost:3000
+Grafana  : http://localhost:3001 (admin / $GF_GRAFANA_PASS)
+```
+
+`init/00_create_lab.sh` が自動で `lab` データベースと TimescaleDB 拡張を作成します。  
+postgres の init スクリプトがどうしても起動しない場合、`docker compose exec postgres psql -U postgres -c "CREATE DATABASE lab` を実行して lab を作成してください。
+
+.env sample
+
+```env
+PG_URL=postgres://postgres:secret@postgres:5432/postgres?sslmode=disable
+POSTGRES_PASSWORD=secret
+GF_GRAFANA_PASS=admin
 ```
 
 ---
 
-## 3. `.env` を用意
+## 3. エージェントの配布・起動
 
-ルートに `.env` を作成して接続文字列を定義します。
-
-```dotenv
-# データベース接続文字列 (TimescaleDB 拡張入り)
-PG_URL=postgres://postgres:password@postgres:5432/lab
-```
-
-> _`POSTGRES_PASSWORD` と `GF_GRAFANA_PASS` はお好みで変更してください。_
-
----
-
-## 4. init スクリプトで `lab` DB を自動作成
-
-`docker-entrypoint-initdb.d` へ SQL を置いてあるので **手作業で CREATE DATABASE する必要はありません**。
-
-```
-init/
-└─ 10_create_lab.sql   # lab DB が無ければ作成
-```
-
----
-
-## 5. 起動
+### 3.1 wheel ビルド（開発 PC）
 
 ```bash
-docker compose up -d --build   # 初回はイメージをビルド
+$ pip wheel ./agent -w dist
 ```
 
-| サービス     | URL                                            | 備考                         |
-| ------------ | ---------------------------------------------- | ---------------------------- |
-| UI (Next.js) | [http://localhost:3000](http://localhost:3000) | シナリオ登録フォーム         |
-| Backend API  | [http://localhost:4000](http://localhost:4000) | `/api/scenario` など         |
-| Grafana      | [http://localhost:3001](http://localhost:3001) | 初期ユーザ **admin / admin** |
-| Postgres     | `localhost:5432`                               | `lab` DB が作成済み          |
+### 3.2 エージェントホストでのインストール
+
+```bash
+# 事前インストール(今回は OpenSUSE の例)
+$ ssh agent sudo zypper refresh
+$ ssh agent sudo zypper update
+$ ssh agent sudo zypper install postgresql17-contrib
+$ ssh agent sudo zypper install python3x
+# コピー & 展開
+$ scp dist/pgbench_agent-*.whl user@agent:/tmp/
+$ ssh agent sudo mkdir -p /opt/pgbench-agent
+$ ssh agent sudo pip install /tmp/pgbench_agent-*.whl --target /opt/pgbench-agent
+
+# もしインストールした python のバスが通らない場合、以下のように対応する
+$ ssh agent sudo python3.x -m pip install /tmp/pgbench_agent-*.whl --target /opt/pgbench-agent
+
+# systemd ユニット
+# もし上部で python のパスが通らなかった場合、 ExecStart の python のパスを変更すること
+# 例：python3x をインストールした場合、 /usr/bin/python3.x
+$ ssh agent 'sudo tee /etc/systemd/system/pgbench-agent.service > /dev/null <<"EOF"
+[Unit]
+Description=pgbench agent
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -u /opt/pgbench-agent/agent.py
+Restart=always
+EnvironmentFile=/etc/pgbench-agent.conf
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target
+EOF'
+```
+
+### 3.3 接続先 URL の設定
+
+接続先の URL を設定する場合、様々な方法がありますが、今回は 2 種類紹介します。
+
+a. `/etc/pgbench-agent.conf` を作成してそこに WS_URL を記載する
+
+この場合、全てサーバ側からの命令で対応できるので楽です。
+
+```bash
+# 接続先 URL を設定
+$ ssh agent 'echo WS_URL=http://CONTROL_IP:4000 > /etc/pgbench-agent.conf'
+$ ssh agent 'sudo systemctl daemon-reload && sudo systemctl enable --now pgbench-agent'
+```
+
+b. `systemctl edit` を使って環境変数を追加する
+
+場合によってはエージェントにログインして対応する必要があります。
+
+```bash
+# エージェント側にログインしている想定
+# systemctl edit を起動 nano の場合、 ctrl+O -> Enter -> ctrl+x で保存して終了
+# 編集内容下記参照
+$ sudo systemctl edit pgbench-agent
+# 編集後、reload して再起動
+$ sudo systemctl daemon-reload && sudo systemctl start pgbench-agent
+```
+
+`### Edits below this comment will be discarded` よりも上に書かないと反映されないことに注意してください。
+
+```text
+[Service]
+Environment="WS_URL=http://<CONTROL_IP>:4000"
+```
 
 ---
 
-## 6. Grafana 初期設定
+## 4. UI の使い方
 
-1. ブラウザで [http://localhost:3001](http://localhost:3001) にアクセスし `admin / admin` でログイン。
-2. **Connections → Data sources → Add data source → PostgreSQL**。
-3. **Host** `postgres` / **Database** `lab` / **User** `postgres` / **Password** `password`。
-4. **Secure connection** を `disable` (sslmode=disable) に変更し **Save & Test**。
-5. 新規 Dashboard → Panel で以下のクエリ例を入力。
+1. ブラウザで **http\://[control-plane]:3000** を開く。
+2. 「接続中エージェント」にチェックボックスで一覧表示。
+3. `clients` / `time(sec)` を入力して **Run pgbench** を押す。
+4. Grafana ダッシュボード「Bench › TPS/live」でリアルタイムの TPS/レイテンシが確認可能。
+
+---
+
+## 5. データベーススキーマ
 
 ```sql
-SELECT $__time(ts), avg(tps) AS tps
-FROM bench_result
+-- 進捗 (1 秒ごと)
+CREATE TABLE bench_progress (
+  agent_id   text,
+  job_id     uuid,
+  tps        numeric,
+  latency_ms numeric,
+  ts         timestamptz DEFAULT now()
+);
+
+-- 実行結果 (ジョブ単位)
+CREATE TABLE bench_result (
+  agent_id   text,
+  job_id     uuid,
+  returncode int,
+  output     text,
+  created_at timestamptz DEFAULT now()
+);
+```
+
+TimescaleDB が有効な場合は両テーブルとも自動でハイパーテーブル化されます。
+
+---
+
+## 6. Grafana 用サンプルクエリ
+
+### TPS (1 秒バケット)
+
+```sql
+SELECT time_bucket('1s', ts) AS time, agent_id, avg(tps) AS avg_tps
+FROM bench_progress
+WHERE $__timeFilter(ts)
+GROUP BY 1, agent_id
+ORDER BY 1;
+```
+
+### レイテンシ P95 (5 秒バケット)
+
+```sql
+SELECT time_bucket('5s', ts) AS time,
+       percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95
+FROM bench_progress
 WHERE $__timeFilter(ts)
 GROUP BY 1
 ORDER BY 1;
@@ -94,92 +215,18 @@ ORDER BY 1;
 
 ---
 
-## 6.5. VM 設定
+## 7. トラブルシューティング
 
-今回は手順が少し煩雑な OpenSUSE の手順を整理する j
-
-```bash
-sudo zypper refresh # パッケージマネージャをリフレッシュ
-sudo zypper update # アップデート
-
-# postgres インストール
-sudo zypper install postgresql16-contrib
-
-# python 3.11 をインストール
-sudo zypper install python311
-sudo zypper install python311-websockets
-```
-
-pgbench 用の DB を作成
-
-```bash
-sudo -u postgres createdb bench
-```
-
-## 7. エージェントを VM に配置
-
-```bash
-scp agent/agent.py vmuser@<VM_IP>:/opt/agent/
-ssh vmuser@<VM_IP>
-# PostgreSQL クライアントと pgbench が入っていることを確認
-python3 -m pip install websockets
-
-# systemd ユニット
-sudo tee /etc/systemd/system/agent.service <<'EOF'
-[Unit]
-Description=pgbench agent
-After=network-online.target
-
-[Service]
-User=vmuser
-Environment=WS_URL=ws://<HOST_IP>:4000/agent
-Environment=AGENT_ID=$(hostname)
-ExecStart=/usr/bin/python3 -u /opt/agent/agent.py
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload && sudo systemctl enable --now agent
-```
-
-複数 VM に同じ手順を行えば、バックエンドが自動で WebSocket を受理しメトリクスを収集します。
+| 症状                            | 対処                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------ |
+| `database "lab" does not exist` | Postgres 再起動 (`docker compose restart postgres`) で init スクリプトを再実行 |
+| Agent が無限再起動              | `WS_URL`／`WS_PATH` が正しいか確認 (`/ws`)                                     |
+| backend `ERR_HTTP_HEADERS_SENT` | `res.json()` を 1 回だけ呼ぶ                                                   |
+| Grafana SQL の `$agent` エラー  | ダッシュボード変数 `agent` を作成                                              |
+| `pgbench-agent`が起動しない     | python のバージョンを確認(3.8>=)                                               |
 
 ---
 
-## 8. シナリオ投入 API
+## 8. 既知のバグ
 
-```bash
-curl -X POST http://localhost:4000/api/scenario \
-  -H 'Content-Type: application/json' \
-  -d '{
-        "pattern":"steady",
-        "params":{"clients":10,"time":60},
-        "host":"$(hostname)"        # もしくは "targetTag":"all"
-      }'
-```
-
-`{"queued":1}` が返れば Redis キューに投入済み。Grafana のグラフに TPS がリアルタイムで表示されます。
-
----
-
-## 9. クリーンアップ
-
-```bash
-docker compose down -v   # ボリュームも削除
-```
-
----
-
-## 10. よくあるトラブルシュート
-
-| 症状                                   | 原因                                   | 対処                                                                                 |
-| -------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------ |
-| `error: database "lab" does not exist` | ボリューム再生成時に init SQL が無効化 | `docker compose down -v` → up -d で init 再適用 or `.env` で PG_URL を既定 DB に変更 |
-| `pq: SSL is not enabled`               | Grafana が TLS 必須で接続              | Data source → **Secure connection = disable**                                        |
-| progress 行がパースされない            | pgbench < 15 or STDERR 読み漏れ        | agent.py を `-P 1` + `stderr=STDOUT` へ修正                                          |
-
----
-
-Happy benchmarking! 🎉
+- bench_result には現状 tps および latency_ms が入りません。(実装していないため)

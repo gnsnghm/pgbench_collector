@@ -1,0 +1,2 @@
+python-socketio[client]<6,>=5.11
+aiohttp<4,>=3.9

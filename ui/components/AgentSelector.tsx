@@ -1,46 +1,41 @@
 // ui/components/AgentSelector.tsx
-import React, { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 
-/**
- * Props accepted by <AgentSelector />
- * - **onSelect** (optional): コールバックで、選択された agentId を返す。
- */
-export type AgentSelectorProps = {
-  onSelect?: (agentId: string) => void;
+type Props = {
+  onSelect: (ids: string[]) => void;
+  selected: string[];
 };
 
-/**
- * エージェント一覧をセレクトボックスで選択させるシンプルな UI。
- * 選択が変わるたびに `onSelect` が呼ばれる。
- */
-const AgentSelector: React.FC<AgentSelectorProps> = ({ onSelect }) => {
-  const [agents, setAgents] = useState<string[]>([]);
-  const [sel, setSel] = useState("");
+export default function AgentSelector({ onSelect, selected }: Props) {
+  const [agents, setAgents] = useState<{ id: string; host?: string }[]>([]);
 
-  // TODO: 本来は /api/agents などから fetch する
   useEffect(() => {
-    setAgents(["pgbench112", "vm-002"]);
+    fetch("/api/agents")
+      .then((r) => r.json())
+      .then(setAgents)
+      .catch(console.error);
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-    setSel(value);
-    onSelect?.(value);
+  const toggle = (id: string) => {
+    const next = selected.includes(id)
+      ? selected.filter((x) => x !== id)
+      : [...selected, id];
+    onSelect(next);
   };
 
   return (
-    <select value={sel} onChange={handleChange} className="border p-1 rounded">
-      <option value="" disabled>
-        Select agent
-      </option>
+    <>
+      <h3>接続中エージェント ({agents.length})</h3>
       {agents.map((a) => (
-        <option key={a} value={a}>
-          {a}
-        </option>
+        <label key={a.id} style={{ display: "block" }}>
+          <input
+            type="checkbox"
+            checked={selected.includes(a.id)}
+            onChange={() => toggle(a.id)}
+          />
+          {a.id}
+        </label>
       ))}
-    </select>
+    </>
   );
-};
-
-export default AgentSelector;
-export { AgentSelector };
+}

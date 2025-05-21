@@ -7,6 +7,7 @@ import { registerAgent, unregisterAgent } from "./ws-registry.js";
 import "./worker.js"; // start BullMQ worker
 import pg from "pg";
 import agentsRouter from "./routes/agents.js";
+import { httpServer } from "./app.js";
 
 // -------------------------------------------------
 // Postgres 接続
@@ -73,4 +74,5 @@ wss.on("connection", (socket) => {
   });
 });
 
-server.listen(4000, () => console.log("API listening on :4000"));
+const PORT = process.env.PORT || 4000;
+httpServer.listen(PORT, () => console.log(`API listening on :${PORT}`));

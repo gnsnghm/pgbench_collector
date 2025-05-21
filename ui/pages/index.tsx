@@ -1,31 +1,67 @@
 // ui/pages/index.tsx
+import { useState, FormEvent } from "react";
 import AgentSelector from "../components/AgentSelector";
-import { useState } from "react";
 
 export default function Home() {
-  const [host, setHost] = useState("");
-  const [clients, setCli] = useState(10);
+  // AgentSelector から返してもらう ID 配列
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // フォーム入力
+  const [clients, setClients] = useState(10);
   const [time, setTime] = useState(60);
 
-  async function submit() {
-    const body = { host, clients, time };
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+
+    // agentIds が空なら何もしない
+    if (selectedIds.length === 0)
+      return alert("エージェントを選択してください");
+
     await fetch("/api/scenario", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        agentIds: selectedIds,
+        clients: Number(clients),
+        time: Number(time),
+      }),
     });
+
+    alert("queued!");
   }
 
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        submit();
-      }}
-    >
-      <AgentSelector onSelect={setHost} />
-      {/* clients/time の入力… */}
-      <button type="submit" disabled={!host}>
+    <form onSubmit={submit} style={{ padding: 32 }}>
+      {/* --- エージェント一覧 --- */}
+      <AgentSelector onSelect={setSelectedIds} selected={selectedIds} />
+
+      {/* --- パラメータ入力 --- */}
+      <div>
+        <label>
+          clients:
+          <input
+            type="number"
+            value={clients}
+            min={1}
+            onChange={(e) => setClients(Number(e.target.value))}
+            style={{ width: 80, marginLeft: 8 }}
+          />
+        </label>
+      </div>
+      <div>
+        <label>
+          time(sec):
+          <input
+            type="number"
+            value={time}
+            min={1}
+            onChange={(e) => setTime(Number(e.target.value))}
+            style={{ width: 80, marginLeft: 8 }}
+          />
+        </label>
+      </div>
+
+      <button type="submit" disabled={selectedIds.length === 0}>
         Run pgbench
       </button>
     </form>

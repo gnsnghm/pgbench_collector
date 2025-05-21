@@ -1,12 +1,22 @@
 // backend/src/routes/agents.js
-import express from "express";
-import { agentRegistry } from "../ws-registry.js";
+import { Router } from "express";
+import { getIO } from "../io.js";
 
-const router = express.Router();
+const router = Router();
 
-// GET /api/agents   → ["vm-001","vm-002", ...]
 router.get("/", (req, res) => {
-  res.json([...agentRegistry.keys()]);
+  const io = getIO();
+  const list = [];
+
+  for (const [, socket] of io.of("/").sockets) {
+    if (socket.data.agentId) {
+      list.push({
+        id: socket.data.agentId,
+      });
+    }
+  }
+
+  res.json(list); // 例: [ { id:"pgbench112-abcd12", host:"192.168.0.12" } ]
 });
 
 export default router;
