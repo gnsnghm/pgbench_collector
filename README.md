@@ -207,7 +207,14 @@ TimescaleDB が有効な場合は両テーブルとも自動でハイパーテ�
 
 ---
 
-## 6. Grafana 用サンプルクエリ
+## 6. Grafana と PostgreSQL の接続とサンプルクエリ
+
+### 接続方法
+
+1. ブラウザで [http://localhost:3001](http://localhost:3001) にアクセスし `admin / admin` でログイン。
+2. **Connections → Data sources → Add data source → PostgreSQL**。
+3. **Host** `postgres` / **Database** `lab` / **User** `postgres` / **Password** `password`。
+4. **Secure connection** を `disable` (sslmode=disable) に変更し **Save & Test**。
 
 ### TPS (1 秒バケット)
 
