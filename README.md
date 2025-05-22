@@ -70,7 +70,9 @@ $ mv docker-compose-proxy.yml docker-compose.yml
 ```
 
 `init/00_create_lab.sh` が自動で `lab` データベースと TimescaleDB 拡張を作成します。  
-postgres の init スクリプトがどうしても起動しない場合、`docker compose exec postgres psql -U postgres -c "CREATE DATABASE lab` を実行して lab を作成してください。
+postgres の init スクリプトが起動しないケースがあります。  
+`docker compose exec postgres psql -U postgres -c "CREATE DATABASE lab;"` を実行して lab を作成してください。
+また、 timescaleDB の extension が入らないケースもあるので、 `docker compose exec postgres psql -U postgres -d lab -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"` を実行してください。
 
 .env sample
 
