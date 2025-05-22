@@ -123,14 +123,12 @@ $ ssh agent 'sudo tee /etc/systemd/system/pgbench-agent.service > /dev/null <<"E
 [Unit]
 Description=pgbench agent
 After=network-online.target
-
 [Service]
-Type=simple
+User=postgres
 ExecStart=/usr/bin/python3 -u /opt/pgbench-agent/agent.py
+Environment=AGENT_ID=%H
 Restart=always
-EnvironmentFile=/etc/pgbench-agent.conf
-TimeoutStopSec=15
-
+StandardOutput=journal
 [Install]
 WantedBy=multi-user.target
 EOF'
