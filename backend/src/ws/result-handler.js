@@ -14,16 +14,9 @@ await pool.query(`
     job_id     uuid,
     returncode int,
     output     text,
-    created_at timestamptz DEFAULT now()
+    created_at timestamptz DEFAULT now(),
+    ts         timestamptz DEFAULT now()
   );
-
-  -- 既存テーブルに不足列があれば追加
-  ALTER TABLE bench_result
-    ADD COLUMN IF NOT EXISTS agent_id   text,
-    ADD COLUMN IF NOT EXISTS job_id     uuid,
-    ADD COLUMN IF NOT EXISTS returncode int,
-    ADD COLUMN IF NOT EXISTS output     text,
-    ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
 `);
 console.log("bench_result table ready");
 // ------------------------------------------------------
