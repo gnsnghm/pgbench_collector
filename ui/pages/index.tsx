@@ -1,31 +1,46 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import {
+  Container,
+  Grid,
+  Card,
+  CardContent,
+  Typography,
+  TextField,
+  Button,
+  Box,
+} from "@mui/material";
 import AgentSelector from "../components/AgentSelector";
 import RunningList from "../components/RunningList";
 
-type JobMap = Record<string, string>; // { agentId: jobId }
+type JobMap = Record<string, string>;
 
 export default function Home() {
   const [selected, setSelected] = useState<string[]>([]);
   const [clients, setClients] = useState(10);
   const [time, setTime] = useState(60);
-  const [running, setRunning] = useState<JobMap>({});
   const [runIdInput, setRunIdInput] = useState("");
+  const [running, setRunning] = useState<JobMap>({});
 
-  /* Running */
+  /* 5秒ごとに /api/running を取得 */
   useEffect(() => {
+    let mounted = true;
     async function load() {
       const res = await fetch("/api/running");
       const items: { id: string; job_id: string }[] = await res.json();
+      if (!mounted) return;
       const map: JobMap = {};
       items.forEach((x) => (map[x.id] = x.job_id));
       setRunning(map);
     }
     load();
-    const id = setInterval(load, 5000);
-    return () => clearInterval(id);
+    const iv = setInterval(load, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(iv);
+    };
   }, []);
 
-  /* Run */
+  /* Run ボタン */
   async function handleRun() {
     const res = await fetch("/api/scenario", {
       method: "POST",
@@ -37,12 +52,12 @@ export default function Home() {
         runId: runIdInput.trim() || undefined,
       }),
     });
-    const { jobs } = await res.json(); // {agentId: jobId}
+    const { jobs }: { jobs: JobMap } = await res.json();
     setRunning((prev) => ({ ...prev, ...jobs }));
     setRunIdInput("");
   }
 
-  /* Stop */
+  /* Stop ボタン */
   async function handleStop(agentId: string) {
     await fetch("/api/stop", {
       method: "POST",
@@ -56,54 +71,65 @@ export default function Home() {
     });
   }
 
-  /* --- JSX --- */
   return (
-    <main className="p-8 space-y-6">
-      <h1 className="text-xl font-bold">pgbench Collector</h1>
+    <Container maxWidth="md" sx={{ pt: 4, pb: 4 }}>
+      <Typography variant="h4" gutterBottom>
+        pgbench Collector
+      </Typography>
 
-      <AgentSelector selected={selected} onSelect={setSelected} />
+      <Grid container spacing={4}>
+        {/* 左カラム：コントロールパネル */}
+        <Grid item component="div" xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <AgentSelector selected={selected} onSelect={setSelected} />
 
-      <label className="block">
-        run id&nbsp;
-        <input
-          type="text"
-          className="border px-1 rounded w-52"
-          placeholder="任意ラベル (空 = 自動)"
-          value={runIdInput}
-          onChange={(e) => setRunIdInput(e.target.value)}
-        />
-      </label>
+              <TextField
+                label="Run ID"
+                placeholder="任意ラベル (空 = 自動)"
+                value={runIdInput}
+                onChange={(e) => setRunIdInput(e.target.value)}
+                fullWidth
+                margin="normal"
+              />
 
-      <div className="space-x-4">
-        <label>
-          clients
-          <input
-            type="number"
-            value={clients}
-            onChange={(e) => setClients(Number(e.target.value))}
-            className="ml-1 w-20"
-          />
-        </label>
-        <label>
-          time(sec)
-          <input
-            type="number"
-            value={time}
-            onChange={(e) => setTime(Number(e.target.value))}
-            className="ml-1 w-20"
-          />
-        </label>
-        <button
-          onClick={handleRun}
-          disabled={!selected.length}
-          className="px-3 py-1 bg-blue-600 text-white rounded"
-        >
-          Run pgbench
-        </button>
-      </div>
+              <Box sx={{ display: "flex", gap: 2, mt: 1 }}>
+                <TextField
+                  label="Clients"
+                  type="number"
+                  value={clients}
+                  onChange={(e) => setClients(Number(e.target.value))}
+                  fullWidth
+                  size="small"
+                />
+                <TextField
+                  label="Duration (sec)"
+                  type="number"
+                  value={time}
+                  onChange={(e) => setTime(Number(e.target.value))}
+                  fullWidth
+                  size="small"
+                />
+              </Box>
 
-      {/* ★ 実行中ジョブ一覧 */}
-      <RunningList running={running} onStop={handleStop} />
-    </main>
+              <Button
+                variant="contained"
+                fullWidth
+                sx={{ mt: 2 }}
+                onClick={handleRun}
+                disabled={!selected.length}
+              >
+                Run pgbench
+              </Button>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* 右カラム：実行中ジョブ一覧 */}
+        <Grid item component="div" xs={12} md={8}>
+          <RunningList running={running} onStop={handleStop} />
+        </Grid>
+      </Grid>
+    </Container>
   );
 }
