@@ -70,7 +70,7 @@ $ cd pgbench_collector
 
 > **🟢 プロキシを使わない環境** と **🟡 社内プロキシを経由する環境** でコマンドが異なります。該当する方だけ実行してください。
 
-### 5‑A. プロキシなし (標準)
+### 2‑A. プロキシなし (標準)
 
 ```bash
 # .env に必須変数３つ（PG_URL, POSTGRES_PASSWORD, GF_GRAFANA_PASS）が入っていれば OK
@@ -79,7 +79,7 @@ docker compose up -d --build    # 初回は --build を付けてイメージ作�
 
 ---
 
-### 5‑B. プロキシ環境での起動
+### 2‑B. プロキシ環境での起動
 
 1. **proxy 用 compose ファイル** を追加マージして起動します。
 
@@ -204,6 +204,7 @@ Environment="WS_URL=http://<CONTROL_IP>:4000"
 -- 進捗 (1 秒ごと)
 CREATE TABLE bench_progress (
   agent_id   text,
+  run_id     text,
   job_id     uuid,
   tps        numeric,
   latency_ms numeric,
@@ -214,6 +215,7 @@ CREATE TABLE bench_progress (
 CREATE TABLE bench_result (
   agent_id   text,
   job_id     uuid,
+  run_id     text,
   returncode int,
   output     text,
   created_at timestamptz DEFAULT now()
@@ -261,9 +263,7 @@ ORDER BY 1;
 | 症状                            | 対処                                                                           |
 | ------------------------------- | ------------------------------------------------------------------------------ |
 | `database "lab" does not exist` | Postgres 再起動 (`docker compose restart postgres`) で init スクリプトを再実行 |
-| Agent が無限再起動              | `WS_URL`／`WS_PATH` が正しいか確認 (`/ws`)                                     |
-| backend `ERR_HTTP_HEADERS_SENT` | `res.json()` を 1 回だけ呼ぶ                                                   |
-| Grafana SQL の `$agent` エラー  | ダッシュボード変数 `agent` を作成                                              |
+| Agent が無限再起動              | `WS_URL`/`WS_PATH` が正しいか確認 (`/ws`)                                      |
 | `pgbench-agent`が起動しない     | python のバージョンを確認(3.8>=)                                               |
 
 ---
