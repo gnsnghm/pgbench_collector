@@ -8,7 +8,8 @@ export default function Home() {
   const [selected, setSelected] = useState<string[]>([]);
   const [clients, setClients] = useState(10);
   const [time, setTime] = useState(60);
-  const [running, setRunning] = useState<JobMap>({}); // ★ 実行中ジョブ
+  const [running, setRunning] = useState<JobMap>({});
+  const [runIdInput, setRunIdInput] = useState("");
 
   /* Running */
   useEffect(() => {
@@ -29,10 +30,16 @@ export default function Home() {
     const res = await fetch("/api/scenario", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ agentIds: selected, clients, time }),
+      body: JSON.stringify({
+        agentIds: selected,
+        clients,
+        time,
+        runId: runIdInput.trim() || undefined,
+      }),
     });
     const { jobs } = await res.json(); // {agentId: jobId}
     setRunning((prev) => ({ ...prev, ...jobs }));
+    setRunIdInput("");
   }
 
   /* Stop */
@@ -55,6 +62,17 @@ export default function Home() {
       <h1 className="text-xl font-bold">pgbench Collector</h1>
 
       <AgentSelector selected={selected} onSelect={setSelected} />
+
+      <label className="block">
+        run id&nbsp;
+        <input
+          type="text"
+          className="border px-1 rounded w-52"
+          placeholder="任意ラベル (空 = 自動)"
+          value={runIdInput}
+          onChange={(e) => setRunIdInput(e.target.value)}
+        />
+      </label>
 
       <div className="space-x-4">
         <label>

@@ -13,8 +13,18 @@ await pool.query(`
     job_id     uuid,
     tps        numeric,
     latency_ms numeric,
-    ts         timestamptz default now()
-  );`);
+    ts         timestamptz default now(),
+    run_id     text
+  );
+  
+    ALTER TABLE bench_progress
+    ADD COLUMN IF NOT EXISTS agent_id   text,
+    ADD COLUMN IF NOT EXISTS job_id     uuid,
+    ADD COLUMN IF NOT EXISTS tps        numeric,
+    ADD COLUMN IF NOT EXISTS latency_ms numeric,
+    ADD COLUMN IF NOT EXISTS ts         timestamptz DEFAULT now(),
+    ADD COLUMN IF NOT EXISTS run_id     text;
+  `);
 
 console.log("bench_progress table ready");
 
@@ -23,9 +33,9 @@ io.on("connection", (socket) => {
   socket.on("progress", async (row) => {
     try {
       await pool.query(
-        `INSERT INTO bench_progress(agent_id, job_id, tps, latency_ms)
-         VALUES ($1,$2,$3,$4)`,
-        [row.agentId, row.jobId, row.tps, row.latency_ms]
+        `INSERT INTO bench_progress(agent_id, job_id, tps, latency_ms, run_id)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [row.agentId, row.jobId, row.tps, row.latency_ms, row.runId]
       );
     } catch (e) {
       console.error("progress insert error:", e);

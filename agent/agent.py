@@ -62,6 +62,7 @@ async def on_run(data):
         clients = int(data["clients"])
         duration = int(data["time"])
         job_id = data.get("jobId") or str(uuid.uuid4())
+        run_id = data.get("runId") or f"run_{job_id}"
     except (KeyError, ValueError):
         return logging.error("invalid run payload: %s", data)
 
@@ -101,6 +102,7 @@ async def on_run(data):
                 "jobId":    job_id,
                 "tps":      tps,
                 "latency_ms": lat,
+                "runId": run_id,
             })
 
     await proc.wait()
@@ -110,6 +112,7 @@ async def on_run(data):
         "jobId":      job_id,
         "returncode": proc.returncode,
         "stdout":     "\n".join(stdout_lines),
+        "runId":      run_id,
     })
     logging.info("job=%s end code=%s", job_id, proc.returncode)
 
