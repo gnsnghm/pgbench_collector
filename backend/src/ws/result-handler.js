@@ -15,11 +15,33 @@ await pool.query(`
     returncode int,
     output     text,
     created_at timestamptz DEFAULT now(),
-    ts         timestamptz DEFAULT now()
+    ts         timestamptz DEFAULT now(),
+    run_id     text
   );
+
+  ALTER TABLE bench_result
+  ADD COLUMN IF NOT EXISTS agent_id   text,
+  ADD COLUMN IF NOT EXISTS job_id     uuid,
+  ADD COLUMN IF NOT EXISTS returncode int,
+  ADD COLUMN IF NOT EXISTS output     text,
+  ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS run_id     text;
 `);
 console.log("bench_result table ready");
 // ------------------------------------------------------
+
+// Hypertable 化（TimescaleDB がなければスキップ）
+try {
+  await pool.query(
+    "SELECT create_hypertable('bench_result','created_at', if_not_exists=>TRUE)"
+  );
+} catch (err) {
+  if (err.code === "42883") {
+    console.warn("TimescaleDB extension missing, skipping hypertable");
+  } else {
+    throw err;
+  }
+}
 
 const io = getIO();
 
