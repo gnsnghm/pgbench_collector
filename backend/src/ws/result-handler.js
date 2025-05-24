@@ -27,8 +27,9 @@ io.on("connection", (socket) => {
   socket.on("result", async (row) => {
     try {
       await pool.query(
-        `INSERT INTO bench_result(agent_id, job_id, returncode, output)
-         VALUES ($1,$2,$3,$4)`,
+        `UPDATE bench_result
+         SET returncode=$3, output=$4, created_at=now()
+       WHERE agent_id=$1 AND job_id=$2`,
         [row.agentId, row.jobId, row.returncode, row.output]
       );
       console.log(`inserted result job=${row.jobId}`);
