@@ -1,41 +1,46 @@
-// ui/components/AgentSelector.tsx
-import { useState, useEffect } from "react";
+/* ui/components/AgentSelector.tsx */
+import { useEffect, useState } from "react";
 
-type Props = {
-  onSelect: (ids: string[]) => void;
+interface Props {
   selected: string[];
-};
+  onSelect(ids: string[]): void;
+}
 
-export default function AgentSelector({ onSelect, selected }: Props) {
-  const [agents, setAgents] = useState<{ id: string; host?: string }[]>([]);
+export default function AgentSelector({ selected, onSelect }: Props) {
+  const [agents, setAgents] = useState<string[]>([]);
 
+  /* 5 秒ごとに一覧を再取得 */
   useEffect(() => {
-    fetch("/api/agents")
-      .then((r) => r.json())
-      .then(setAgents)
-      .catch(console.error);
+    async function load() {
+      const res = await fetch("/api/agents");
+      const list: { id: string }[] = await res.json();
+      setAgents(list.map((a) => a.id));
+    }
+    load();
+    const id = setInterval(load, 5000);
+    return () => clearInterval(id);
   }, []);
 
-  const toggle = (id: string) => {
-    const next = selected.includes(id)
-      ? selected.filter((x) => x !== id)
-      : [...selected, id];
-    onSelect(next);
-  };
+  /* トグル */
+  const toggle = (id: string) =>
+    selected.includes(id)
+      ? onSelect(selected.filter((x) => x !== id))
+      : onSelect([...selected, id]);
 
   return (
-    <>
-      <h3>接続中エージェント ({agents.length})</h3>
-      {agents.map((a) => (
-        <label key={a.id} style={{ display: "block" }}>
+    <div className="space-y-1">
+      <h2 className="font-semibold">接続中エージェント</h2>
+      {agents.map((id) => (
+        <label key={id} className="block">
           <input
             type="checkbox"
-            checked={selected.includes(a.id)}
-            onChange={() => toggle(a.id)}
+            checked={selected.includes(id)}
+            onChange={() => toggle(id)}
+            className="mr-1"
           />
-          {a.id}
+          {id}
         </label>
       ))}
-    </>
+    </div>
   );
 }

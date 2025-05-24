@@ -21,6 +21,9 @@ import uuid
 
 import socketio
 
+# ── グローバル変数 ──────────────────────────────────────────────
+current_job = None
+
 # ── 環境変数 ──────────────────────────────────────────────
 WS_URL = os.getenv("WS_URL", "http://localhost:4000")
 WS_PATH = os.getenv("WS_PATH", "/ws")
@@ -76,6 +79,8 @@ async def on_run(data):
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
+    global current_job
+    current_job = (job_id, proc)
 
     stdout_lines = []
     async for raw in proc.stdout:
@@ -117,6 +122,27 @@ async def graceful_shutdown(stop_event):
             await sio.disconnect()
         except Exception as e:
             logging.warning("disconnect error: %s", e)
+
+# ── cancel イベント ───────────────────────────────────────
+
+
+@sio.on("cancel")
+async def on_cancel(msg):
+    job_id = msg.get("jobId")
+    global current_job
+    if current_job and current_job[0] == job_id:
+        proc = current_job[1]
+        if proc.returncode is None:
+            proc.terminate()               # SIGTERM
+            await proc.wait()
+            logging.info("job %s cancelled", job_id)
+            await sio.emit("result", {
+                "agentId": AGENT_ID,
+                "jobId":   job_id,
+                "returncode": -15,         # 独自コード (SIGTERM)
+                "stdout":  "cancelled by user"
+            })
+    current_job = None
 
 # ── メインループ ──────────────────────────────────────
 

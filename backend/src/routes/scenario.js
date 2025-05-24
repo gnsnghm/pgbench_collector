@@ -1,7 +1,10 @@
 import { Router } from "express";
+import { randomUUID } from "node:crypto";
+import pg from "pg";
 import { getIO } from "../io.js";
 import queue from "../queues/pgbench.js";
 
+const pgPool = new pg.Pool({ connectionString: process.env.PG_URL });
 const router = Router();
 
 router.post("/", async (req, res, next) => {
@@ -21,27 +24,38 @@ router.post("/", async (req, res, next) => {
 
     // ── エージェントへ run イベント送信 ────
     const io = getIO();
-    agentIds.forEach((id) => {
+    const jobs = {};
+
+    for (const id of agentIds) {
+      const jobId = randomUUID();
+      jobs[id] = jobId;
+
+      // bench_result へ仮行を INSERT
+      await pgPool.query(
+        `INSERT INTO bench_result(agent_id, job_id)
+         VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+        [id, jobId]
+      );
+
+      // Socket.IO へ
       for (const [, sock] of io.of("/").sockets) {
         if (sock.data.agentId === id) {
-          sock.emit("run", { clients, time });
+          sock.emit("run", { jobId, clients, time });
           break;
         }
       }
-    });
 
-    // ── BullMQ にジョブ登録（任意）─────────
-    await queue.addBulk(
-      agentIds.map((id) => ({
-        name: `run-${id}-${Date.now()}`,
-        data: { id, clients, time },
-      }))
-    );
+      // BullMQ へ
+      await queue.add(
+        `run-${id}-${Date.now()}`, // job name
+        { id, jobId, clients, time }
+      );
+    }
 
     // ── ★ レスポンスはここで 1 回だけ ─────
     return res.status(202).json({
       queued: true,
-      targets: agentIds.length,
+      jobs,
     });
   } catch (err) {
     return next(err); // エラーハンドラへ

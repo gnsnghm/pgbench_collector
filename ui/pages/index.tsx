@@ -1,69 +1,91 @@
-// ui/pages/index.tsx
-import { useState, FormEvent } from "react";
+import { useState, useEffect } from "react";
 import AgentSelector from "../components/AgentSelector";
+import RunningList from "../components/RunningList";
+
+type JobMap = Record<string, string>; // { agentId: jobId }
 
 export default function Home() {
-  // AgentSelector から返してもらう ID 配列
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-
-  // フォーム入力
+  const [selected, setSelected] = useState<string[]>([]);
   const [clients, setClients] = useState(10);
   const [time, setTime] = useState(60);
+  const [running, setRunning] = useState<JobMap>({}); // ★ 実行中ジョブ
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
+  /* Running */
+  useEffect(() => {
+    async function load() {
+      const res = await fetch("/api/running");
+      const items: { id: string; job_id: string }[] = await res.json();
+      const map: JobMap = {};
+      items.forEach((x) => (map[x.id] = x.job_id));
+      setRunning(map);
+    }
+    load();
+    const id = setInterval(load, 5000);
+    return () => clearInterval(id);
+  }, []);
 
-    // agentIds が空なら何もしない
-    if (selectedIds.length === 0)
-      return alert("エージェントを選択してください");
-
-    await fetch("/api/scenario", {
+  /* Run */
+  async function handleRun() {
+    const res = await fetch("/api/scenario", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        agentIds: selectedIds,
-        clients: Number(clients),
-        time: Number(time),
-      }),
+      body: JSON.stringify({ agentIds: selected, clients, time }),
     });
-
-    alert("queued!");
+    const { jobs } = await res.json(); // {agentId: jobId}
+    setRunning((prev) => ({ ...prev, ...jobs }));
   }
 
-  return (
-    <form onSubmit={submit} style={{ padding: 32 }}>
-      {/* --- エージェント一覧 --- */}
-      <AgentSelector onSelect={setSelectedIds} selected={selectedIds} />
+  /* Stop */
+  async function handleStop(agentId: string) {
+    await fetch("/api/stop", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agentId, jobId: running[agentId] }),
+    });
+    setRunning((prev) => {
+      const cp = { ...prev };
+      delete cp[agentId];
+      return cp;
+    });
+  }
 
-      {/* --- パラメータ入力 --- */}
-      <div>
+  /* --- JSX --- */
+  return (
+    <main className="p-8 space-y-6">
+      <h1 className="text-xl font-bold">pgbench Collector</h1>
+
+      <AgentSelector selected={selected} onSelect={setSelected} />
+
+      <div className="space-x-4">
         <label>
-          clients:
+          clients
           <input
             type="number"
             value={clients}
-            min={1}
             onChange={(e) => setClients(Number(e.target.value))}
-            style={{ width: 80, marginLeft: 8 }}
+            className="ml-1 w-20"
           />
         </label>
-      </div>
-      <div>
         <label>
-          time(sec):
+          time(sec)
           <input
             type="number"
             value={time}
-            min={1}
             onChange={(e) => setTime(Number(e.target.value))}
-            style={{ width: 80, marginLeft: 8 }}
+            className="ml-1 w-20"
           />
         </label>
+        <button
+          onClick={handleRun}
+          disabled={!selected.length}
+          className="px-3 py-1 bg-blue-600 text-white rounded"
+        >
+          Run pgbench
+        </button>
       </div>
 
-      <button type="submit" disabled={selectedIds.length === 0}>
-        Run pgbench
-      </button>
-    </form>
+      {/* ★ 実行中ジョブ一覧 */}
+      <RunningList running={running} onStop={handleStop} />
+    </main>
   );
 }
