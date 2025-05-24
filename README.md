@@ -11,7 +11,7 @@ PostgreSQL に負荷を掛けてベンチマーク結果を TimescaleDB に蓄�
 - **エージェント**
 
   - Python 3 + pgbench
-  - Socket.IO でリアルタイムに TPS／レイテンシを送信
+  - Socket.IO でリアルタイムに TPS/レイテンシを送信
   - systemd サービスとして常駐
 
 ---
@@ -49,46 +49,63 @@ graph TD
 # リポジトリ取得
 $ git clone https://github.com/gnsnghm/pgbench_collector
 $ cd pgbench_collector
-
-# 環境変数設定
-$ cp .env.sample .env       # PG_URL / POSTGRES_PASSWORD / GF_GRAFANA_PASS を編集
-
-# ビルド & 起動
-$ docker compose build
-$ docker compose up -d
-
-# 動作確認
-UI       : http://localhost:3000
-Grafana  : http://localhost:3001 (admin / $GF_GRAFANA_PASS)
 ```
 
-**proxy が必要な環境でコンテナを起動する場合、 `docker-compose-proxy.ymd` をリネームしてお使いください**
+### .env の準備
+
+以下の環境変数をルートの **`.env`** に定義してください。
+
+| 変数                | 必須 | 用途                                     | 例 (プロキシなし)                                              | 例 (プロキシあり)                    |
+| ------------------- | ---- | ---------------------------------------- | -------------------------------------------------------------- | ------------------------------------ |
+| `PG_URL`            | ✅   | backend ▶︎ Postgres の接続文字列         | `postgres://postgres:secret@postgres:5432/lab?sslmode=disable` | 同左                                 |
+| `POSTGRES_PASSWORD` | ✅   | Postgres コンテナの `postgres` ユーザ PW | `secret`                                                       | 同左                                 |
+| `GF_GRAFANA_PASS`   | ✅   | Grafana 管理者パスワード                 | `admin`                                                        | 同左                                 |
+| `HTTP_PROXY`        | ⬜︎  | 社内 HTTP プロキシ URL                   | _(未設定)_                                                     | `http://proxy.example.com:8080`      |
+| `HTTPS_PROXY`       | ⬜︎  | 社内 HTTPS プロキシ URL                  | _(未設定)_                                                     | `http://proxy.example.com:8080`      |
+| `NO_PROXY`          | ⬜︎  | プロキシを経由しないホスト一覧           | _(未設定)_                                                     | `localhost,127.0.0.1,postgres,redis` |
+
+> プロキシを利用しない環境では `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` を省略してください。
+
+### 起動
+
+> **🟢 プロキシを使わない環境** と **🟡 社内プロキシを経由する環境** でコマンドが異なります。該当する方だけ実行してください。
+
+### 5‑A. プロキシなし (標準)
 
 ```bash
-$ mv docker-compose.yml dokcer-compose-org.yml
-$ mv docker-compose-proxy.yml docker-compose.yml
+# .env に必須変数３つ（PG_URL, POSTGRES_PASSWORD, GF_GRAFANA_PASS）が入っていれば OK
+docker compose up -d --build    # 初回は --build を付けてイメージ作成
 ```
 
-`init/00_create_lab.sh` が自動で `lab` データベースと TimescaleDB 拡張を作成します。  
-postgres の init スクリプトが起動しないケースがあります。  
-`docker compose exec postgres psql -U postgres -c "CREATE DATABASE lab;"` を実行して lab を作成してください。
-また、 timescaleDB の extension が入らないケースもあるので、 `docker compose exec postgres psql -U postgres -d lab -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"` を実行してください。
+---
 
-.env sample
+### 5‑B. プロキシ環境での起動
 
-```env
-PG_URL=postgres://postgres:secret@postgres:5432/postgres?sslmode=disable
-POSTGRES_PASSWORD=secret
-GF_GRAFANA_PASS=admin
-```
+1. **proxy 用 compose ファイル** を追加マージして起動します。
 
-proxy を利用している場合、以下の環境変数も追加するようにしてください。
+   ```bash
+   docker compose \
+     -f docker-compose.yml \
+     -f docker-compose.proxy.yml \
+     up -d --build
+   ```
 
-```env
-HTTP_PROXY=http://<YOUR-PROXY-FQDN>:8080
-HTTPS_PROXY=http://<YOUR-PROXY-FQDN>:8080
-NO_PROXY=localhost,127.0.0.1
-```
+   _`docker-compose.proxy.yml`_ には `HTTP_PROXY` 等を `build.args` / `environment` に注入する差分だけが書かれています。
+
+> **ヒント**: PowerShell では改行バックスラッシュの代わりに `` ` `` (バッククォート) を使うか、1 行にまとめてください。
+
+起動後、以下の URL で各サービスにアクセスできます。
+
+| サービス     | URL                                            |
+| ------------ | ---------------------------------------------- |
+| UI (Next.js) | [http://localhost:3000](http://localhost:3000) |
+| Backend API  | [http://localhost:4000](http://localhost:4000) |
+| Grafana      | [http://localhost:3001](http://localhost:3001) |
+
+> `init/00_create_lab.sh` が自動で `lab` データベースと TimescaleDB 拡張を作成します。  
+> postgres の init スクリプトが起動しないケースがあります。  
+> `docker compose exec postgres psql -U postgres -c "CREATE DATABASE lab;"` を実行して lab を作成してください。
+> また、 timescaleDB の extension が入らないケースもあるので、 `docker compose exec postgres psql -U postgres -d lab -c "CREATE EXTENSION IF NOT EXISTS timescaledb;"` を実行してください。
 
 ---
 
@@ -140,7 +157,7 @@ EOF'
 
 接続先の URL を設定する場合、様々な方法がありますが、今回は 2 種類紹介します。
 
-a. `/etc/pgbench-agent.conf` を作成してそこに WS_URL を記載する
+### 3.3-A. `/etc/pgbench-agent.conf` を作成してそこに WS_URL を記載する場合
 
 この場合、全てサーバ側からの命令で対応できるので楽です。
 
@@ -150,7 +167,7 @@ $ ssh agent 'echo WS_URL=http://CONTROL_IP:4000 > /etc/pgbench-agent.conf'
 $ ssh agent 'sudo systemctl daemon-reload && sudo systemctl enable --now pgbench-agent'
 ```
 
-b. `systemctl edit` を使って環境変数を追加する
+### 3.3-A. `systemctl edit` を使って環境変数を追加する
 
 場合によってはエージェントにログインして対応する必要があります。
 

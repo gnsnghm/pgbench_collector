@@ -1,0 +1,28 @@
+x-proxy-env: &proxy-env
+  HTTP_PROXY: ${HTTP_PROXY}
+  HTTPS_PROXY: ${HTTPS_PROXY}
+  NO_PROXY: ${NO_PROXY:-localhost,redis,postgres}
+
+services:
+  # -------- build があるサービス -----------------
+  backend:
+    build:
+      args: *proxy-env
+    environment: *proxy-env
+
+  ui:
+    build:
+      args: *proxy-env
+    environment: *proxy-env
+
+  # -------- 既製イメージのみ ----------------------
+  postgres:
+    environment: *proxy-env
+
+  prometheus:
+    environment: *proxy-env
+
+  grafana:
+    environment:
+      <<: *proxy-env
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_GRAFANA_PASS}
