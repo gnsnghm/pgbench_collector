@@ -1,5 +1,13 @@
 /* ui/components/AgentSelector.tsx */
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
+import {
+  Box,
+  Typography,
+  Divider,
+  FormGroup,
+  FormControlLabel,
+  Checkbox,
+} from "@mui/material";
 
 interface Props {
   selected: string[];
@@ -9,38 +17,54 @@ interface Props {
 export default function AgentSelector({ selected, onSelect }: Props) {
   const [agents, setAgents] = useState<string[]>([]);
 
-  /* 5 秒ごとに一覧を再取得 */
+  // 5秒ごとに /api/agents を再取得
   useEffect(() => {
+    let mounted = true;
     async function load() {
-      const res = await fetch("/api/agents");
-      const list: { id: string }[] = await res.json();
-      setAgents(list.map((a) => a.id));
+      try {
+        const res = await fetch("/api/agents");
+        const list: { id: string }[] = await res.json();
+        if (!mounted) return;
+        setAgents(list.map((a) => a.id));
+      } catch (e) {
+        console.error("agent fetch error", e);
+      }
     }
     load();
-    const id = setInterval(load, 5000);
-    return () => clearInterval(id);
+    const iv = setInterval(load, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(iv);
+    };
   }, []);
 
-  /* トグル */
-  const toggle = (id: string) =>
-    selected.includes(id)
-      ? onSelect(selected.filter((x) => x !== id))
-      : onSelect([...selected, id]);
+  const toggle = (id: string) => {
+    if (selected.includes(id)) {
+      onSelect(selected.filter((x) => x !== id));
+    } else {
+      onSelect([...selected, id]);
+    }
+  };
 
   return (
-    <div className="space-y-1">
-      <h2 className="font-semibold">接続中エージェント</h2>
-      {agents.map((id) => (
-        <label key={id} className="block">
-          <input
-            type="checkbox"
-            checked={selected.includes(id)}
-            onChange={() => toggle(id)}
-            className="mr-1"
+    <Box sx={{ mb: 2, p: 2, bgcolor: "background.paper", borderRadius: 1 }}>
+      <Typography variant="h6">接続中エージェント</Typography>
+      <Divider sx={{ my: 1 }} />
+      <FormGroup>
+        {agents.map((id) => (
+          <FormControlLabel
+            key={id}
+            control={
+              <Checkbox
+                checked={selected.includes(id)}
+                onChange={() => toggle(id)}
+                color="primary"
+              />
+            }
+            label={id}
           />
-          {id}
-        </label>
-      ))}
-    </div>
+        ))}
+      </FormGroup>
+    </Box>
   );
 }

@@ -1,28 +1,49 @@
+/* ui/components/AgentSelector.tsx */
+import React from "react";
+import {
+  Box,
+  Typography,
+  List,
+  ListItem,
+  ListItemText,
+  Button,
+} from "@mui/material";
+
 type Props = {
-  running: Record<string, string>; // agentId -> jobId
+  running: Record<string, string>; // agentId → jobId
   onStop: (agentId: string) => void;
 };
 
 export default function RunningList({ running, onStop }: Props) {
   const ids = Object.keys(running);
-  if (!ids.length) return null;
+  if (ids.length === 0) return null;
 
   return (
-    <section>
-      <h2 className="font-semibold">Running Jobs</h2>
-      <ul className="space-y-1">
+    <Box sx={{ mt: 4, p: 2, bgcolor: "background.paper", borderRadius: 1 }}>
+      <Typography variant="h6">Running Jobs</Typography>
+      <List disablePadding>
         {ids.map((id) => (
-          <li key={id} className="flex items-center gap-2">
-            <span className="font-mono">{id}</span>
-            <button
-              onClick={() => onStop(id)}
-              className="px-2 py-0.5 bg-red-600 text-white rounded"
-            >
-              Stop
-            </button>
-          </li>
+          <ListItem
+            key={id}
+            secondaryAction={
+              <Button
+                variant="contained"
+                color="error"
+                size="small"
+                onClick={() => onStop(id)}
+              >
+                Stop
+              </Button>
+            }
+          >
+            <ListItemText
+              primary={id}
+              secondary={running[id]}
+              primaryTypographyProps={{ fontFamily: "monospace" }}
+            />
+          </ListItem>
         ))}
-      </ul>
-    </section>
+      </List>
+    </Box>
   );
 }
